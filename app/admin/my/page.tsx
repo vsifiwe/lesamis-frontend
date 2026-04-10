@@ -9,12 +9,12 @@ const stats = [
   { label: "Penalties", value: "—", icon: AlertCircleIcon, description: "Outstanding penalties" },
 ]
 
-export default function MemberDashboardPage() {
+export default function AdminMyHomePage() {
   return (
     <>
       <div>
         <h1 className="text-xl font-semibold">My Information</h1>
-        <p className="text-sm text-muted-foreground">Welcome back. Here&apos;s a summary of your account.</p>
+        <p className="text-sm text-muted-foreground">A personal view of your contributions, loans, and penalties.</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
