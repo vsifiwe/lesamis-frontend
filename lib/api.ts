@@ -46,6 +46,9 @@ async function apiFetch(path: string, init: RequestInit = {}, retry = true): Pro
     }
 
     clearTokens()
+    if (typeof window !== "undefined") {
+      window.location.replace("/login")
+    }
   }
 
   let data: unknown
