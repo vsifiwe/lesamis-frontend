@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { PlusIcon } from "lucide-react"
+import { MoreHorizontalIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import { api, ApiError } from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
@@ -13,6 +13,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -48,6 +54,12 @@ const emptyForm = {
   description: "",
 }
 
+const emptyProfitForm = {
+  profit_date: "",
+  amount: "",
+  description: "",
+}
+
 function fmt(n: string | number) {
   return Number(n).toLocaleString("fr-RW", { minimumFractionDigits: 0 })
 }
@@ -77,14 +89,41 @@ function statusVariant(s: string): "default" | "outline" | "secondary" {
   return "secondary"
 }
 
+function ActionsMenu({ investment, onRecordProfit }: {
+  investment: Investment
+  onRecordProfit: (inv: Investment) => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8">
+          <MoreHorizontalIcon className="h-4 w-4" />
+          <span className="sr-only">Actions</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => onRecordProfit(investment)}>
+          Record Profit
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 export default function AdminInvestmentsPage() {
   const [investments, setInvestments] = useState<Investment[]>([])
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState<string | null>(null)
 
+  // New investment dialog
   const [newOpen, setNewOpen]   = useState(false)
   const [form, setForm]         = useState(emptyForm)
   const [saving, setSaving]     = useState(false)
+
+  // Record profit dialog
+  const [profitTarget, setProfitTarget]   = useState<Investment | null>(null)
+  const [profitForm, setProfitForm]       = useState(emptyProfitForm)
+  const [savingProfit, setSavingProfit]   = useState(false)
 
   useEffect(() => {
     api
@@ -102,6 +141,10 @@ export default function AdminInvestmentsPage() {
 
   function set(field: keyof typeof emptyForm, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function setProfit(field: keyof typeof emptyProfitForm, value: string) {
+    setProfitForm((prev) => ({ ...prev, [field]: value }))
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -134,6 +177,36 @@ export default function AdminInvestmentsPage() {
       }
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleProfitSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (!profitTarget) return
+    setSavingProfit(true)
+    try {
+      await api.post(`/api/v1/investments/${profitTarget.id}/profit-entries/`, {
+        profit_date: profitForm.profit_date,
+        amount: Number(profitForm.amount),
+        description: profitForm.description,
+      })
+      setProfitTarget(null)
+      setProfitForm(emptyProfitForm)
+      toast.success(`Profit recorded for "${profitTarget.name}".`)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const data = err.data as Record<string, string | string[]> | null
+        const first =
+          data &&
+          (typeof Object.values(data)[0] === "string"
+            ? (Object.values(data)[0] as string)
+            : (Object.values(data)[0] as string[])[0])
+        toast.error(first ?? `Failed to record profit (${err.status})`)
+      } else {
+        toast.error("Could not reach the server.")
+      }
+    } finally {
+      setSavingProfit(false)
     }
   }
 
@@ -183,6 +256,7 @@ export default function AdminInvestmentsPage() {
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Description</TableHead>
+                  <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -202,6 +276,9 @@ export default function AdminInvestmentsPage() {
                     <TableCell className="max-w-xs truncate text-sm text-muted-foreground">
                       {inv.description || "—"}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <ActionsMenu investment={inv} onRecordProfit={setProfitTarget} />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -214,7 +291,10 @@ export default function AdminInvestmentsPage() {
               <div key={inv.id} className="rounded-lg border p-4 text-sm">
                 <div className="mb-1 flex items-start justify-between gap-2">
                   <p className="font-semibold">{inv.name}</p>
-                  <Badge variant={statusVariant(inv.status)}>{statusLabel(inv.status)}</Badge>
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant={statusVariant(inv.status)}>{statusLabel(inv.status)}</Badge>
+                    <ActionsMenu investment={inv} onRecordProfit={setProfitTarget} />
+                  </div>
                 </div>
                 <div className="mb-2">
                   <Badge variant="secondary">{typeLabel(inv.investment_type)}</Badge>
@@ -316,6 +396,59 @@ export default function AdminInvestmentsPage() {
           <DialogFooter showCloseButton>
             <Button type="submit" form="new-investment-form" disabled={saving}>
               {saving ? "Saving…" : "Record Investment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Record Profit dialog */}
+      <Dialog open={!!profitTarget} onOpenChange={(open) => { if (!open) { setProfitTarget(null); setProfitForm(emptyProfitForm) } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record Profit</DialogTitle>
+            {profitTarget && (
+              <p className="text-sm text-muted-foreground">{profitTarget.name}</p>
+            )}
+          </DialogHeader>
+          <form id="profit-form" onSubmit={handleProfitSubmit}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="profit-date">Profit date</FieldLabel>
+                <Input
+                  id="profit-date"
+                  type="date"
+                  value={profitForm.profit_date}
+                  onChange={(e) => setProfit("profit_date", e.target.value)}
+                  required
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="profit-amount">Amount</FieldLabel>
+                <Input
+                  id="profit-amount"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={profitForm.amount}
+                  onChange={(e) => setProfit("amount", e.target.value)}
+                  required
+                  placeholder="0"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="profit-description">Description</FieldLabel>
+                <Input
+                  id="profit-description"
+                  value={profitForm.description}
+                  onChange={(e) => setProfit("description", e.target.value)}
+                  placeholder="Optional notes"
+                />
+              </Field>
+            </FieldGroup>
+          </form>
+          <DialogFooter showCloseButton>
+            <Button type="submit" form="profit-form" disabled={savingProfit}>
+              {savingProfit ? "Saving…" : "Record Profit"}
             </Button>
           </DialogFooter>
         </DialogContent>
