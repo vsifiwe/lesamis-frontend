@@ -37,6 +37,7 @@ interface Investment {
   investment_type: "shares" | "land" | "bond" | "other"
   investment_date: string
   amount_invested: string
+  total_profit: string
   status: "active" | "exited" | "partial_exit"
   description: string
   created_by: string
@@ -190,6 +191,8 @@ export default function AdminInvestmentsPage() {
         amount: Number(profitForm.amount),
         description: profitForm.description,
       })
+      const updated = await api.get<Investment[]>("/api/v1/investments/")
+      setInvestments(updated)
       setProfitTarget(null)
       setProfitForm(emptyProfitForm)
       toast.success(`Profit recorded for "${profitTarget.name}".`)
@@ -254,6 +257,7 @@ export default function AdminInvestmentsPage() {
                   <TableHead>Type</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="text-right">Profit</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead />
@@ -269,6 +273,9 @@ export default function AdminInvestmentsPage() {
                     <TableCell className="text-sm">{inv.investment_date}</TableCell>
                     <TableCell className="text-right font-semibold">
                       {fmt(inv.amount_invested)}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold text-green-600 dark:text-green-400">
+                      {parseFloat(inv.total_profit) > 0 ? `+${fmt(inv.total_profit)}` : "—"}
                     </TableCell>
                     <TableCell>
                       <Badge variant={statusVariant(inv.status)}>{statusLabel(inv.status)}</Badge>
@@ -302,6 +309,9 @@ export default function AdminInvestmentsPage() {
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
                   <span>Date: <span className="text-foreground">{inv.investment_date}</span></span>
                   <span>Amount: <span className="font-semibold text-foreground">{fmt(inv.amount_invested)}</span></span>
+                  <span>Profit: <span className={`font-semibold ${parseFloat(inv.total_profit) > 0 ? "text-green-600 dark:text-green-400" : "text-foreground"}`}>
+                    {parseFloat(inv.total_profit) > 0 ? `+${fmt(inv.total_profit)}` : "—"}
+                  </span></span>
                 </div>
                 {inv.description && (
                   <p className="mt-2 truncate text-muted-foreground">{inv.description}</p>
