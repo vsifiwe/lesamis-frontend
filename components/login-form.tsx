@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/components/auth-provider"
+import { api, ApiError } from "@/lib/api"
+import { decodeToken } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -35,26 +37,20 @@ export function LoginForm({
     setLoading(true)
 
     try {
-      const res = await fetch("http://localhost:8000/api/v1/auth/token/", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        toast.error(data?.detail ?? "Invalid email or password.")
-        return
-      }
-
-      const { access, refresh } = await res.json()
+      const { access, refresh } = await api.post<{ access: string; refresh: string }>(
+        "/api/v1/auth/token/",
+        { email, password }
+      )
       login(access, refresh)
-
-      // Decode payload to check role
-      const payload = JSON.parse(atob(access.split(".")[1]))
+      const payload = decodeToken(access)
       router.replace(payload.is_admin ? "/admin/dashboard" : "/member/dashboard")
-    } catch {
-      toast.error("Could not reach the server. Please try again.")
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const data = err.data as Record<string, string> | null
+        toast.error(data?.detail ?? "Invalid email or password.")
+      } else {
+        toast.error("Could not reach the server. Please try again.")
+      }
     } finally {
       setLoading(false)
     }
