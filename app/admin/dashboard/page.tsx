@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react"
 import {
+  ArrowDownIcon,
+  ArrowUpIcon,
   BriefcaseIcon,
   ChartBarIcon,
   HandCoinsIcon,
@@ -26,10 +28,19 @@ interface FundAccount {
   balance: number
 }
 
+interface FundSummary {
+  total_credit: number
+  total_debit: number
+  current_available: number
+  expected_total: number
+  available_for_investment: number
+}
+
 interface LoanSummary {
   total_loans_disbursed: number
   expected_interest: number
   total_loan_interest_paid: number  // total repaid: principal + interest
+  fund_summary: FundSummary
 }
 
 interface Investment {
@@ -160,7 +171,7 @@ export default function AdminDashboardPage() {
 
       {loading && (
         <div className="space-y-8">
-          {[3, 3, 3].map((count, i) => (
+          {[3, 3, 3, 3].map((count, i) => (
             <div key={i} className="space-y-3">
               <Skeleton className="h-4 w-24 rounded" />
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -181,6 +192,64 @@ export default function AdminDashboardPage() {
 
       {!loading && !error && (
         <div className="space-y-8">
+
+          {/* ── Fund Overview ── */}
+          {loans?.fund_summary && (
+            <Section title="Fund Overview">
+              <StatCard
+                label="Total Credits"
+                value={fmt(loans.fund_summary.total_credit)}
+                icon={ArrowDownIcon}
+                sub="all inflows across accounts"
+              />
+              <StatCard
+                label="Total Debits"
+                value={fmt(loans.fund_summary.total_debit)}
+                icon={ArrowUpIcon}
+                sub="all outflows across accounts"
+              />
+              <StatCard
+                label="Currently Available"
+                value={fmt(loans.fund_summary.current_available)}
+                icon={WalletIcon}
+                explain={
+                  <div className="space-y-1.5 text-sm">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      How it&apos;s calculated
+                    </p>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Total credits</span>
+                      <span className="font-medium text-green-600 dark:text-green-400">
+                        +{fmt(loans.fund_summary.total_credit)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Total debits</span>
+                      <span className="font-medium text-destructive">
+                        −{fmt(loans.fund_summary.total_debit)}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex justify-between border-t pt-2">
+                      <span className="font-medium">Available</span>
+                      <span className="font-bold">{fmt(loans.fund_summary.current_available)}</span>
+                    </div>
+                  </div>
+                }
+              />
+              <StatCard
+                label="Expected Total"
+                value={fmt(loans.fund_summary.expected_total)}
+                icon={TrendingUpIcon}
+                sub="when all obligations are fulfilled"
+              />
+              <StatCard
+                label="Available for Investment"
+                value={fmt(loans.fund_summary.available_for_investment)}
+                icon={BriefcaseIcon}
+                sub="after reserves"
+              />
+            </Section>
+          )}
 
           {/* ── Fund Accounts ── */}
           <Section title="Fund Accounts">
