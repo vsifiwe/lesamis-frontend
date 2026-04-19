@@ -2,17 +2,10 @@
 
 import { useEffect, useState } from "react"
 import {
-  ArrowDownIcon,
-  ArrowUpIcon,
   BriefcaseIcon,
-  ChartBarIcon,
   HandCoinsIcon,
   InfoIcon,
-  TrendingUpIcon,
   WalletIcon,
-  UsersIcon,
-  Users2Icon,
-  ReceiptIcon,
 } from "lucide-react"
 import { api, ApiError } from "@/lib/api"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -34,6 +27,7 @@ interface FundSummary {
   current_available: number
   expected_total: number
   available_for_investment: number
+  realized_profits: number
 }
 
 interface LoanSummary {
@@ -50,29 +44,21 @@ interface Investment {
   status: "active" | "exited" | "partial_exit"
 }
 
-const FUND_META: Record<string, { icon: React.ElementType }> = {
-  SOCIAL:      { icon: UsersIcon  },
-  SOCIAL_PLUS: { icon: Users2Icon },
-  CAPITAL:     { icon: WalletIcon },
-}
-
 function fmt(n: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(n) + " RWF"
 }
 
-// ── Uniform stat card ──────────────────────────────────────────────────────────
+// ── Hero stat card ─────────────────────────────────────────────────────────────
 
 function StatCard({
   label,
   value,
   icon: Icon,
-  sub,
   explain,
 }: {
   label: string
   value: string
   icon?: React.ElementType
-  sub?: string
   explain?: React.ReactNode
 }) {
   return (
@@ -83,7 +69,7 @@ function StatCard({
       </CardHeader>
       <CardContent className="pt-0">
         <div className="flex items-end justify-between gap-2">
-          <p className="text-2xl font-bold tracking-tight">{value}</p>
+          <p className="text-3xl font-bold tracking-tight">{value}</p>
           {explain && (
             <HoverCard openDelay={100}>
               <HoverCardTrigger asChild>
@@ -101,24 +87,36 @@ function StatCard({
             </HoverCard>
           )}
         </div>
-        {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
       </CardContent>
     </Card>
   )
 }
 
-// ── Section wrapper ────────────────────────────────────────────────────────────
+// ── Detail table ───────────────────────────────────────────────────────────────
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function DetailTable({
+  title,
+  rows,
+}: {
+  title: string
+  rows: { label: string; value: string }[]
+}) {
   return (
-    <section className="space-y-3">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {title}
-      </h2>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {children}
-      </div>
-    </section>
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0 space-y-2">
+        {rows.map(({ label, value }) => (
+          <div key={label} className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">{label}</span>
+            <span className="font-medium tabular-nums">{value}</span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -152,10 +150,9 @@ export default function AdminDashboardPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const totalInvested = investments.reduce((s, i) => s + parseFloat(i.amount_invested), 0)
-  const totalProfit   = investments.reduce((s, i) => s + parseFloat(i.total_profit), 0)
-  const roiPct        = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0
-  const activeCount   = investments.filter((i) => i.status === "active").length
+  const totalInvested  = investments.reduce((s, i) => s + parseFloat(i.amount_invested), 0)
+  const totalProfit    = investments.reduce((s, i) => s + parseFloat(i.total_profit), 0)
+  const roiPct         = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0
 
   const ORDER = ["CAPITAL", "SOCIAL", "SOCIAL_PLUS"]
   const sorted = ORDER.map((code) => accounts.find((a) => a.code === code)).filter(Boolean) as FundAccount[]
@@ -170,17 +167,17 @@ export default function AdminDashboardPage() {
       </div>
 
       {loading && (
-        <div className="space-y-8">
-          {[3, 3, 3, 3].map((count, i) => (
-            <div key={i} className="space-y-3">
-              <Skeleton className="h-4 w-24 rounded" />
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {Array.from({ length: count }).map((_, j) => (
-                  <Skeleton key={j} className="h-28 rounded-xl" />
-                ))}
-              </div>
-            </div>
-          ))}
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-28 rounded-xl" />
+            ))}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-32 rounded-xl" />
+            ))}
+          </div>
         </div>
       )}
 
@@ -191,23 +188,11 @@ export default function AdminDashboardPage() {
       )}
 
       {!loading && !error && (
-        <div className="space-y-8">
+        <div className="space-y-6">
 
-          {/* ── Fund Overview ── */}
-          {loans?.fund_summary && (
-            <Section title="Fund Overview">
-              <StatCard
-                label="Total Credits"
-                value={fmt(loans.fund_summary.total_credit)}
-                icon={ArrowDownIcon}
-                sub="all inflows across accounts"
-              />
-              <StatCard
-                label="Total Debits"
-                value={fmt(loans.fund_summary.total_debit)}
-                icon={ArrowUpIcon}
-                sub="all outflows across accounts"
-              />
+          {/* ── Hero KPIs ── */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            {loans?.fund_summary && (
               <StatCard
                 label="Currently Available"
                 value={fmt(loans.fund_summary.current_available)}
@@ -236,125 +221,60 @@ export default function AdminDashboardPage() {
                   </div>
                 }
               />
-              <StatCard
-                label="Expected Total"
-                value={fmt(loans.fund_summary.expected_total)}
-                icon={TrendingUpIcon}
-                sub="when all obligations are fulfilled"
-              />
-              <StatCard
-                label="Available for Investment"
-                value={fmt(loans.fund_summary.available_for_investment)}
-                icon={BriefcaseIcon}
-                sub="after reserves"
-              />
-            </Section>
-          )}
-
-          {/* ── Fund Accounts ── */}
-          <Section title="Fund Accounts">
-            {display.map((account) => {
-              const meta = FUND_META[account.code]
-              return (
-                <StatCard
-                  key={account.id}
-                  label={account.name}
-                  value={fmt(account.balance)}
-                  icon={meta?.icon}
-                  explain={
-                    <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Balance breakdown
-                      </p>
-                      <div className="space-y-1.5 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Total credits</span>
-                          <span className="font-medium text-green-600 dark:text-green-400">
-                            +{fmt(account.total_credits)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Total debits</span>
-                          <span className="font-medium text-destructive">
-                            −{fmt(account.total_debits)}
-                          </span>
-                        </div>
-                        <div className="mt-2 flex justify-between border-t pt-2">
-                          <span className="font-medium">Balance</span>
-                          <span className="font-bold">{fmt(account.balance)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  }
-                />
-              )
-            })}
-          </Section>
-
-          {/* ── Loans ── */}
-          {loans && (
-            <Section title="Loans">
+            )}
+            {loans && (
               <StatCard
                 label="Total Disbursed"
                 value={fmt(loans.total_loans_disbursed)}
                 icon={HandCoinsIcon}
               />
-              <StatCard
-                label="Expected Interest"
-                value={fmt(loans.expected_interest)}
-                icon={TrendingUpIcon}
-              />
-              <StatCard
-                label="Total Repaid"
-                value={fmt(loans.total_loan_interest_paid)}
-                icon={ReceiptIcon}
-                sub="principal + interest"
-              />
-            </Section>
-          )}
-
-          {/* ── Investments ── */}
-          {investments.length > 0 && (
-            <Section title="Investments">
+            )}
+            {investments.length > 0 && (
               <StatCard
                 label="Total Invested"
                 value={fmt(totalInvested)}
                 icon={BriefcaseIcon}
               />
-              <StatCard
-                label="Total Profit"
-                value={fmt(totalProfit)}
-                icon={TrendingUpIcon}
-                explain={
-                  <div className="space-y-1.5 text-sm">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Return on investment
-                    </p>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Total invested</span>
-                      <span className="font-medium">{fmt(totalInvested)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Total profit</span>
-                      <span className="font-medium text-green-600 dark:text-green-400">
-                        +{fmt(totalProfit)}
-                      </span>
-                    </div>
-                    <div className="mt-2 flex justify-between border-t pt-2">
-                      <span className="font-medium">ROI</span>
-                      <span className="font-bold">{roiPct.toFixed(1)}%</span>
-                    </div>
-                  </div>
-                }
+            )}
+          </div>
+
+          {/* ── Detail tables ── */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <DetailTable
+              title="Fund Accounts"
+              rows={display.map((a) => ({ label: a.name, value: fmt(a.balance) }))}
+            />
+            {loans?.fund_summary && (
+              <DetailTable
+                title="Fund Overview"
+                rows={[
+                  { label: "Total Credits",            value: fmt(loans.fund_summary.total_credit) },
+                  { label: "Total Debits",             value: fmt(loans.fund_summary.total_debit) },
+                  { label: "Expected Total",           value: fmt(loans.fund_summary.expected_total) },
+                  { label: "Available for Investment", value: fmt(loans.fund_summary.available_for_investment) },
+                ]}
               />
-              <StatCard
-                label="Active Investments"
-                value={String(activeCount)}
-                icon={ChartBarIcon}
-                sub="currently active"
+            )}
+            {loans && (
+              <DetailTable
+                title="Loans"
+                rows={[
+                  { label: "Expected Interest", value: fmt(loans.expected_interest) },
+                  { label: "Total Repaid",       value: fmt(loans.total_loan_interest_paid) },
+                ]}
               />
-            </Section>
-          )}
+            )}
+            {investments.length > 0 && (
+              <DetailTable
+                title="Investments"
+                rows={[
+                  { label: "Total Profit",        value: fmt(totalProfit) },
+                  { label: "Return on Investment", value: `${roiPct.toFixed(1)}%` },
+                  { label: "Realized Profit",      value: fmt(loans?.fund_summary.realized_profits ?? 0) },
+                ]}
+              />
+            )}
+          </div>
 
         </div>
       )}
