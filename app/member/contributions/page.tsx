@@ -1,6 +1,128 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { api, ApiError } from "@/lib/api"
+import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+
+interface ReceivedItem {
+  id: string
+  cycle_year: number
+  cycle_month: number
+  amount_applied: string
+  received_date: string
+  payment_method: string
+}
+
+interface PendingItem {
+  id: string
+  cycle_year: number
+  cycle_month: number
+  due_date: string
+  total_amount_expected: number
+  status: "expected" | "partially_paid" | "paid_unconfirmed" | "unpaid"
+}
+
+interface ContributionsResponse {
+  received: ReceivedItem[]
+  pending: PendingItem[]
+}
+
+type Row =
+  | { kind: "received"; id: string; year: number; month: number; date: string; dateLabel: string; amount: number; status: "confirmed"; paymentMethod: string }
+  | { kind: "pending";  id: string; year: number; month: number; date: string; dateLabel: string; amount: number; status: PendingItem["status"] }
+
+function fmt(n: number | string) {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Number(n)) + " RWF"
+}
+
+function cycleLabel(year: number, month: number) {
+  return new Date(year, month - 1).toLocaleString("en-US", { month: "long", year: "numeric" })
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  confirmed:        "Confirmed",
+  expected:         "Expected",
+  partially_paid:   "Partially Paid",
+  paid_unconfirmed: "Submitted",
+  unpaid:           "Unpaid",
+}
+
+const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
+  confirmed:        "default",
+  expected:         "secondary",
+  partially_paid:   "outline",
+  paid_unconfirmed: "secondary",
+  unpaid:           "destructive",
+}
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash:         "Cash",
+  bank:         "Bank",
+  mobile_money: "Mobile Money",
+}
+
 export default function MemberContributionsPage() {
+  const [data, setData] = useState<ContributionsResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    api.get<ContributionsResponse>("/api/v1/me/contributions/")
+      .then(setData)
+      .catch((err) => {
+        setError(
+          err instanceof ApiError
+            ? `Failed to load contributions (${err.status})`
+            : "Could not reach the server."
+        )
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  const rows: Row[] = data
+    ? [
+        ...data.received.map((r): Row => ({
+          kind:          "received",
+          id:            r.id,
+          year:          r.cycle_year,
+          month:         r.cycle_month,
+          date:          r.received_date,
+          dateLabel:     formatDate(r.received_date),
+          amount:        Number(r.amount_applied),
+          status:        "confirmed",
+          paymentMethod: r.payment_method,
+        })),
+        ...data.pending.map((p): Row => ({
+          kind:      "pending",
+          id:        p.id,
+          year:      p.cycle_year,
+          month:     p.cycle_month,
+          date:      p.due_date,
+          dateLabel: `Due ${formatDate(p.due_date)}`,
+          amount:    p.total_amount_expected,
+          status:    p.status,
+        })),
+      ].sort((a, b) =>
+        b.year !== a.year ? b.year - a.year :
+        b.month !== a.month ? b.month - a.month :
+        // within same cycle: pending before received
+        a.kind === "pending" && b.kind === "received" ? -1 : 1
+      )
+    : []
+
   return (
     <>
       <div>
@@ -8,9 +130,56 @@ export default function MemberContributionsPage() {
         <p className="text-sm text-muted-foreground">Your personal contribution history and upcoming payments.</p>
       </div>
 
-      <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed py-20 text-sm text-muted-foreground">
-        Your contribution history will appear here.
-      </div>
+      {loading && <Skeleton className="h-64 rounded-xl" />}
+
+      {error && (
+        <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed py-20 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && (
+        <div className="rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Cycle</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Method</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="text-right">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-12 text-center text-sm text-muted-foreground">
+                    No contributions found.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                rows.map((row) => (
+                  <TableRow key={row.kind + row.id}>
+                    <TableCell className="font-medium">{cycleLabel(row.year, row.month)}</TableCell>
+                    <TableCell className="text-muted-foreground">{row.dateLabel}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {row.kind === "received"
+                        ? (PAYMENT_METHOD_LABELS[row.paymentMethod] ?? row.paymentMethod)
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">{fmt(row.amount)}</TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant={STATUS_VARIANTS[row.status]}>
+                        {STATUS_LABELS[row.status] ?? row.status}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </>
   )
 }
