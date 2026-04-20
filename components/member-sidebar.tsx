@@ -31,6 +31,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Switch } from "@/components/ui/switch"
 import { useAuth } from "@/components/auth-provider"
 import { useMe } from "@/hooks/use-me"
 
@@ -104,10 +105,11 @@ export function MemberSidebar() {
                   <ChevronUpIcon className="ml-auto" />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
-              <DropdownMenuContent side="top" align="start" className="w-48">
-                <DropdownMenuItem onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+              <DropdownMenuContent side="top" align="start" className="w-52">
+                <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
                   {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-                  <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+                  <span className="flex-1">{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+                  <Switch checked={theme === "dark"} />
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
