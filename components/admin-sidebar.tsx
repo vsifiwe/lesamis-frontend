@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+import { useTheme } from "next-themes"
 import {
   LayoutDashboardIcon,
   UsersIcon,
@@ -15,6 +16,9 @@ import {
   CreditCardIcon,
   AlertCircleIcon,
   LogOutIcon,
+  SunIcon,
+  MoonIcon,
+  ChevronUpIcon,
 } from "lucide-react"
 import {
   Sidebar,
@@ -29,7 +33,14 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/components/auth-provider"
+import { useMe } from "@/hooks/use-me"
 
 const adminNav = [
   { title: "Home", url: "/admin/dashboard", icon: LayoutDashboardIcon },
@@ -52,6 +63,8 @@ export function AdminSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { logout, user } = useAuth()
+  const me = useMe()
+  const { theme, setTheme } = useTheme()
 
   function handleLogout() {
     logout()
@@ -125,10 +138,23 @@ export function AdminSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <div className="flex flex-col gap-1 px-2 py-1.5 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">Administrator</span>
-              <span className="truncate">{user?.user_id}</span>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton className="h-auto py-1.5">
+                  <div className="flex flex-col gap-0.5 text-xs text-left">
+                    <span className="font-medium text-foreground">{me?.full_name ?? user?.user_id}</span>
+                    <span className="text-muted-foreground">{me?.role ?? "Admin"}</span>
+                  </div>
+                  <ChevronUpIcon className="ml-auto" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="top" align="start" className="w-48">
+                <DropdownMenuItem onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+                  {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+                  <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={handleLogout} tooltip="Log out">
