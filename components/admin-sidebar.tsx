@@ -11,6 +11,7 @@ import {
   HandCoinsIcon,
   TrendingUpIcon,
   FileBarChart2Icon,
+  ReceiptIcon,
   HomeIcon,
   CircleDollarSignIcon,
   CreditCardIcon,
@@ -51,6 +52,7 @@ const adminNav = [
   { title: "Loans", url: "/admin/loans", icon: HandCoinsIcon },
   { title: "Investments", url: "/admin/investments", icon: TrendingUpIcon },
   { title: "Reports & Audit", url: "/admin/reports", icon: FileBarChart2Icon },
+  { title: "Other Charges", url: "/admin/other-charges", icon: ReceiptIcon },
 ]
 
 const myInfoNav = [
