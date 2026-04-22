@@ -1,8 +1,24 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { MoreHorizontalIcon } from "lucide-react"
+import { toast } from "sonner"
 import { api, ApiError } from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
@@ -22,6 +38,7 @@ interface Penalty {
   amount: string
   reason: string
   auto_generated: boolean
+  receipt: string | null
   waived: boolean
   waived_at: string | null
   created_at: string
@@ -41,9 +58,11 @@ function fmt(n: string | number) {
 }
 
 export default function AdminPenaltiesPage() {
-  const [penalties, setPenalties] = useState<Penalty[]>([])
-  const [loading, setLoading]     = useState(true)
-  const [error, setError]         = useState<string | null>(null)
+  const [penalties, setPenalties]       = useState<Penalty[]>([])
+  const [loading, setLoading]           = useState(true)
+  const [error, setError]               = useState<string | null>(null)
+  const [waiveTarget, setWaiveTarget]   = useState<Penalty | null>(null)
+  const [waiving, setWaiving]           = useState(false)
 
   useEffect(() => {
     api
@@ -58,6 +77,26 @@ export default function AdminPenaltiesPage() {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  async function handleWaive() {
+    if (!waiveTarget) return
+    setWaiving(true)
+    try {
+      const updated = await api.patch<Penalty>(`/api/v1/penalties/${waiveTarget.id}/waive/`)
+      setPenalties((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+      toast.success(`Penalty of ${fmt(waiveTarget.amount)} waived.`)
+      setWaiveTarget(null)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const data = err.data as { detail?: string } | null
+        toast.error(data?.detail ?? `Failed to waive penalty (${err.status})`)
+      } else {
+        toast.error("Could not reach the server.")
+      }
+    } finally {
+      setWaiving(false)
+    }
+  }
 
   const outstanding = penalties.filter((p) => !p.waived)
   const waived      = penalties.filter((p) => p.waived)
@@ -117,6 +156,7 @@ export default function AdminPenaltiesPage() {
                         <TableHead>Reason</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
                         <TableHead>Source</TableHead>
+                        <TableHead />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -139,6 +179,23 @@ export default function AdminPenaltiesPage() {
                           <TableCell className="text-xs text-muted-foreground">
                             {p.auto_generated ? "Auto" : "Manual"}
                           </TableCell>
+                          <TableCell className="text-right">
+                            {p.auto_generated && p.receipt === null && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreHorizontalIcon className="h-4 w-4" />
+                                    <span className="sr-only">Actions</span>
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onSelect={() => setWaiveTarget(p)}>
+                                    Waive
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -154,7 +211,24 @@ export default function AdminPenaltiesPage() {
                           <p className="font-semibold">{p.member_name}</p>
                           <p className="font-mono text-xs text-muted-foreground">{p.member_number}</p>
                         </div>
-                        <Badge variant="secondary">{penaltyTypeLabel(p.penalty_type)}</Badge>
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant="secondary">{penaltyTypeLabel(p.penalty_type)}</Badge>
+                          {p.auto_generated && p.receipt === null && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontalIcon className="h-4 w-4" />
+                                  <span className="sr-only">Actions</span>
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onSelect={() => setWaiveTarget(p)}>
+                                  Waive
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
                         <span>Cycle: <span className="text-foreground">{p.cycle}</span></span>
@@ -244,6 +318,27 @@ export default function AdminPenaltiesPage() {
           )}
         </div>
       )}
+
+      {/* Waive confirmation dialog */}
+      <Dialog open={!!waiveTarget} onOpenChange={(open) => { if (!open) setWaiveTarget(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Waive penalty?</DialogTitle>
+          </DialogHeader>
+          {waiveTarget && (
+            <p className="text-sm text-muted-foreground">
+              This will waive the <span className="font-medium text-foreground">{fmt(waiveTarget.amount)} RWF</span> {penaltyTypeLabel(waiveTarget.penalty_type).toLowerCase()} penalty
+              for <span className="font-medium text-foreground">{waiveTarget.member_name}</span> ({waiveTarget.cycle}).
+              The obligation total will be reduced by the same amount.
+            </p>
+          )}
+          <DialogFooter showCloseButton>
+            <Button variant="destructive" onClick={handleWaive} disabled={waiving}>
+              {waiving ? "Waiving…" : "Waive penalty"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
