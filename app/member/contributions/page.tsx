@@ -31,14 +31,24 @@ interface PendingItem {
   status: "expected" | "partially_paid" | "paid_unconfirmed" | "unpaid"
 }
 
+interface PurchaseItem {
+  id: string
+  share_count_snapshot: number
+  share_unit_value_snapshot: number
+  total_amount_expected: number
+  created_at: string
+}
+
 interface ContributionsResponse {
   received: ReceivedItem[]
   pending: PendingItem[]
+  purchases: PurchaseItem[]
 }
 
 type Row =
   | { kind: "received"; id: string; year: number; month: number; date: string; dateLabel: string; amount: number; status: "confirmed"; paymentMethod: string }
   | { kind: "pending";  id: string; year: number; month: number; date: string; dateLabel: string; amount: number; status: PendingItem["status"] }
+  | { kind: "purchase"; id: string; date: string; dateLabel: string; amount: number; label: string }
 
 function fmt(n: number | string) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Number(n)) + " RWF"
@@ -115,12 +125,15 @@ export default function MemberContributionsPage() {
           amount:    p.total_amount_expected,
           status:    p.status,
         })),
-      ].sort((a, b) =>
-        b.year !== a.year ? b.year - a.year :
-        b.month !== a.month ? b.month - a.month :
-        // within same cycle: pending before received
-        a.kind === "pending" && b.kind === "received" ? -1 : 1
-      )
+        ...data.purchases.map((p): Row => ({
+          kind:      "purchase",
+          id:        p.id,
+          date:      p.created_at,
+          dateLabel: formatDate(p.created_at),
+          amount:    p.total_amount_expected,
+          label:     `${p.share_count_snapshot} share${p.share_count_snapshot !== 1 ? "s" : ""} × ${fmt(p.share_unit_value_snapshot)}`,
+        })),
+      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     : []
 
   return (
@@ -160,17 +173,23 @@ export default function MemberContributionsPage() {
               ) : (
                 rows.map((row) => (
                   <TableRow key={row.kind + row.id}>
-                    <TableCell className="font-medium">{cycleLabel(row.year, row.month)}</TableCell>
+                    <TableCell className="font-medium">
+                      {row.kind === "purchase"
+                        ? <span className="text-muted-foreground italic">Share Purchase</span>
+                        : cycleLabel(row.year, row.month)}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{row.dateLabel}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {row.kind === "received"
                         ? (PAYMENT_METHOD_LABELS[row.paymentMethod] ?? row.paymentMethod)
-                        : "—"}
+                        : row.kind === "purchase"
+                          ? <span className="text-xs">{row.label}</span>
+                          : "—"}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-medium">{fmt(row.amount)}</TableCell>
                     <TableCell className="text-right">
-                      <Badge variant={STATUS_VARIANTS[row.status]}>
-                        {STATUS_LABELS[row.status] ?? row.status}
+                      <Badge variant={row.kind === "purchase" ? "default" : STATUS_VARIANTS[row.status]}>
+                        {row.kind === "purchase" ? "Confirmed" : (STATUS_LABELS[row.status] ?? row.status)}
                       </Badge>
                     </TableCell>
                   </TableRow>
