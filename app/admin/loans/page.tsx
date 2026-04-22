@@ -72,7 +72,8 @@ interface Loan {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatRate(r: string) {
-  return (parseFloat(r) * 100).toFixed(0) + "%"
+  const n = parseFloat(r)
+  return (Number.isInteger(n) ? n.toFixed(0) : n.toFixed(1)) + "%"
 }
 
 function fmt(n: string | number) {
@@ -194,7 +195,7 @@ export default function AdminLoansPage() {
       const product = await api.post<LoanProduct>("/api/v1/loan-products/", {
         name: productForm.name,
         duration_months: Number(productForm.duration_months),
-        interest_rate_percent: Number(productForm.interest_rate_percent) / 100,
+        interest_rate_percent: Number(productForm.interest_rate_percent),
         notes: productForm.notes,
       })
       setProducts((prev) => [product, ...prev])
