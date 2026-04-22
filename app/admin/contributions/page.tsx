@@ -43,11 +43,16 @@ interface Obligation {
   member_name: string
   contribution_cycle: string
   cycle: string
+  obligation_type: "contribution" | "share_purchase"
   share_count_snapshot: number
+  shares_to_grant: number | null
+  share_unit_value_snapshot: number
   capital_amount_expected: number
   social_amount_expected: number
   social_plus_amount_expected: number
   total_amount_expected: number
+  amount_paid: string
+  amount_outstanding: string
   status: string
 }
 
@@ -80,6 +85,14 @@ function fmt(n: number | string) {
 
 function methodLabel(m: string) {
   return { cash: "Cash", bank: "Bank", mobile_money: "Mobile Money" }[m] ?? m
+}
+
+function obligationLabel(o: Obligation) {
+  if (o.obligation_type === "share_purchase") {
+    const shares = o.shares_to_grant ?? o.share_count_snapshot
+    return `${shares} share${shares !== 1 ? "s" : ""} purchase`
+  }
+  return o.cycle
 }
 
 const today = new Date().toISOString().slice(0, 10)
@@ -171,7 +184,7 @@ export default function AdminContributionsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const pending = obligations.filter((o) => o.status === "expected")
+  const pending = obligations.filter((o) => o.status !== "confirmed")
 
   // ── Receipt form helpers ────────────────────────────────────────────────────
 
@@ -225,9 +238,9 @@ export default function AdminContributionsPage() {
         items,
       })
 
+      const refreshedObligations = await api.get<Obligation[]>("/api/v1/obligations/")
       setReceipts((prev) => [receipt, ...prev])
-      const coveredIds = new Set(receipt.items.map((i) => i.obligation))
-      setObligations((prev) => prev.filter((o) => !coveredIds.has(o.id)))
+      setObligations(refreshedObligations)
       closeDialog()
       toast.success("Receipt created successfully.")
     } catch (err) {
@@ -279,7 +292,7 @@ export default function AdminContributionsPage() {
 
         {loading ? (
           <>
-            <div className="hidden md:block"><TableSkeleton rows={4} cols={7} /></div>
+            <div className="hidden md:block"><TableSkeleton rows={4} cols={9} /></div>
             <div className="md:hidden"><CardSkeleton count={3} /></div>
           </>
         ) : pending.length === 0 ? (
@@ -294,10 +307,12 @@ export default function AdminContributionsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Member</TableHead>
-                    <TableHead>Cycle</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead className="text-right">Capital</TableHead>
                     <TableHead className="text-right">Social</TableHead>
                     <TableHead className="text-right">Social+</TableHead>
+                    <TableHead className="text-right">Paid</TableHead>
+                    <TableHead className="text-right">Outstanding</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
@@ -309,10 +324,21 @@ export default function AdminContributionsPage() {
                         <p className="font-medium">{o.member_name}</p>
                         <p className="font-mono text-xs text-muted-foreground">{o.member_number}</p>
                       </TableCell>
-                      <TableCell>{o.cycle}</TableCell>
+                      <TableCell>
+                        <div className="space-y-0.5">
+                          <p>{obligationLabel(o)}</p>
+                          {o.obligation_type === "share_purchase" && (
+                            <p className="text-xs text-muted-foreground">
+                              {fmt(o.share_unit_value_snapshot)} per share
+                            </p>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right">{fmt(o.capital_amount_expected)}</TableCell>
                       <TableCell className="text-right">{fmt(o.social_amount_expected)}</TableCell>
                       <TableCell className="text-right">{fmt(o.social_plus_amount_expected)}</TableCell>
+                      <TableCell className="text-right">{fmt(o.amount_paid)}</TableCell>
+                      <TableCell className="text-right">{fmt(o.amount_outstanding)}</TableCell>
                       <TableCell className="text-right font-semibold">{fmt(o.total_amount_expected)}</TableCell>
                       <TableCell>
                         <Badge variant="secondary">{o.status}</Badge>
@@ -335,10 +361,12 @@ export default function AdminContributionsPage() {
                     <Badge variant="secondary">{o.status}</Badge>
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
-                    <span className="col-span-2 text-foreground">{o.cycle}</span>
+                    <span className="col-span-2 text-foreground">{obligationLabel(o)}</span>
                     <span>Capital: {fmt(o.capital_amount_expected)}</span>
                     <span>Social: {fmt(o.social_amount_expected)}</span>
                     <span>Social+: {fmt(o.social_plus_amount_expected)}</span>
+                    <span>Paid: {fmt(o.amount_paid)}</span>
+                    <span>Outstanding: {fmt(o.amount_outstanding)}</span>
                     <span className="font-semibold text-foreground">Total: {fmt(o.total_amount_expected)}</span>
                   </div>
                 </div>
@@ -478,7 +506,7 @@ export default function AdminContributionsPage() {
                           <Checkbox
                             id={`ob-${o.id}`}
                             checked={checked}
-                            onCheckedChange={() => toggleObligation(o.id, o.total_amount_expected)}
+                            onCheckedChange={() => toggleObligation(o.id, Number(o.amount_outstanding))}
                           />
                           <label
                             htmlFor={`ob-${o.id}`}
@@ -490,13 +518,13 @@ export default function AdminContributionsPage() {
                                 {o.member_number}
                               </span>
                             </p>
-                            <p className="mt-0.5 text-xs text-muted-foreground">{o.cycle}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">{obligationLabel(o)}</p>
                           </label>
                           <Input
                             type="number"
                             min={1}
                             className="w-28 text-right"
-                            value={checked ? form.selections[o.id] : o.total_amount_expected}
+                            value={checked ? form.selections[o.id] : o.amount_outstanding}
                             disabled={!checked}
                             onChange={(e) => setAmount(o.id, e.target.value)}
                           />

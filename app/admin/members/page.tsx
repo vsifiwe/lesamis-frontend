@@ -168,7 +168,9 @@ export default function MembersPage() {
 
       closeShareDialog()
       toast.success(
-        `Shares ${shareForm.action === "INCREASE" ? "increased" : "decreased"} to ${account.share_count}.`
+        shareForm.action === "INCREASE"
+          ? `Share purchase obligation created. Current shares remain ${account.share_count} until fully paid.`
+          : `Shares decreased to ${account.share_count}.`
       )
     } catch (err) {
       if (err instanceof ApiError) {

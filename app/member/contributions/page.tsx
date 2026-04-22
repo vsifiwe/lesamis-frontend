@@ -28,14 +28,20 @@ interface PendingItem {
   cycle_month: number
   due_date: string
   total_amount_expected: number
+  amount_paid: string
+  amount_outstanding: string
   status: "expected" | "partially_paid" | "paid_unconfirmed" | "unpaid"
 }
 
 interface PurchaseItem {
   id: string
   share_count_snapshot: number
+  shares_to_grant: number | null
   share_unit_value_snapshot: number
   total_amount_expected: number
+  amount_paid: string
+  amount_outstanding: string
+  status: "expected" | "partially_paid" | "paid_unconfirmed" | "confirmed" | "unpaid"
   created_at: string
 }
 
@@ -47,8 +53,8 @@ interface ContributionsResponse {
 
 type Row =
   | { kind: "received"; id: string; year: number; month: number; date: string; dateLabel: string; amount: number; status: "confirmed"; paymentMethod: string }
-  | { kind: "pending";  id: string; year: number; month: number; date: string; dateLabel: string; amount: number; status: PendingItem["status"] }
-  | { kind: "purchase"; id: string; date: string; dateLabel: string; amount: number; label: string }
+  | { kind: "pending";  id: string; year: number; month: number; date: string; dateLabel: string; amount: number; outstanding: number; status: PendingItem["status"] }
+  | { kind: "purchase"; id: string; date: string; dateLabel: string; amount: number; outstanding: number; label: string; status: PurchaseItem["status"] }
 
 function fmt(n: number | string) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Number(n)) + " RWF"
@@ -123,6 +129,7 @@ export default function MemberContributionsPage() {
           date:      p.due_date,
           dateLabel: `Due ${formatDate(p.due_date)}`,
           amount:    p.total_amount_expected,
+          outstanding: Number(p.amount_outstanding),
           status:    p.status,
         })),
         ...data.purchases.map((p): Row => ({
@@ -131,7 +138,9 @@ export default function MemberContributionsPage() {
           date:      p.created_at,
           dateLabel: formatDate(p.created_at),
           amount:    p.total_amount_expected,
-          label:     `${p.share_count_snapshot} share${p.share_count_snapshot !== 1 ? "s" : ""} × ${fmt(p.share_unit_value_snapshot)}`,
+          outstanding: Number(p.amount_outstanding),
+          label:     `${p.shares_to_grant ?? p.share_count_snapshot} share${(p.shares_to_grant ?? p.share_count_snapshot) !== 1 ? "s" : ""} × ${fmt(p.share_unit_value_snapshot)}`,
+          status:    p.status,
         })),
       ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     : []
@@ -160,13 +169,14 @@ export default function MemberContributionsPage() {
                 <TableHead>Date</TableHead>
                 <TableHead>Method</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="text-right">Outstanding</TableHead>
                 <TableHead className="text-right">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-12 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
                     No contributions found.
                   </TableCell>
                 </TableRow>
@@ -187,9 +197,12 @@ export default function MemberContributionsPage() {
                           : "—"}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-medium">{fmt(row.amount)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {row.kind === "received" ? "—" : fmt(row.outstanding)}
+                    </TableCell>
                     <TableCell className="text-right">
-                      <Badge variant={row.kind === "purchase" ? "default" : STATUS_VARIANTS[row.status]}>
-                        {row.kind === "purchase" ? "Confirmed" : (STATUS_LABELS[row.status] ?? row.status)}
+                      <Badge variant={STATUS_VARIANTS[row.status]}>
+                        {STATUS_LABELS[row.status] ?? row.status}
                       </Badge>
                     </TableCell>
                   </TableRow>
