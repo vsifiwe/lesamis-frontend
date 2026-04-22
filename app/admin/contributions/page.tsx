@@ -77,6 +77,34 @@ interface Receipt {
   items: ReceiptItem[]
 }
 
+interface MemberOption {
+  id: string
+  member_number: string
+  first_name: string
+  last_name: string
+}
+
+interface AdvancePreviewMonth {
+  cycle_id: string
+  year: number
+  month: number
+  label: string
+  obligation_id: string
+  capital_amount_expected: number
+  social_amount_expected: number
+  social_plus_amount_expected: number
+  total_amount_expected: number
+  amount_paid: string
+  amount_outstanding: string
+}
+
+interface AdvancePreview {
+  member_id: string
+  member_name: string
+  months: AdvancePreviewMonth[]
+  amount_received: string
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmt(n: number | string) {
@@ -102,6 +130,14 @@ const emptyForm = {
   payment_method: "bank",
   notes: "",
   selections: {} as Record<string, string>,
+}
+
+const emptyAdvanceForm = {
+  member_id: "",
+  months_ahead: "1",
+  received_date: today,
+  payment_method: "bank",
+  notes: "",
 }
 
 // ── Skeletons ─────────────────────────────────────────────────────────────────
@@ -164,15 +200,23 @@ export default function AdminContributionsPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
+  const [advanceDialogOpen, setAdvanceDialogOpen] = useState(false)
+  const [advanceForm, setAdvanceForm] = useState(emptyAdvanceForm)
+  const [advancePreview, setAdvancePreview] = useState<AdvancePreview | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [savingAdvance, setSavingAdvance] = useState(false)
+  const [members, setMembers] = useState<MemberOption[]>([])
 
   useEffect(() => {
     Promise.all([
       api.get<Obligation[]>("/api/v1/obligations/"),
       api.get<Receipt[]>("/api/v1/receipts/"),
+      api.get<MemberOption[]>("/api/v1/members/"),
     ])
-      .then(([obs, recs]) => {
+      .then(([obs, recs, memberList]) => {
         setObligations(obs)
         setReceipts(recs)
+        setMembers(memberList)
       })
       .catch((err) => {
         setError(
@@ -215,6 +259,91 @@ export default function AdminContributionsPage() {
   function closeDialog() {
     setDialogOpen(false)
     setForm(emptyForm)
+  }
+
+  function closeAdvanceDialog() {
+    setAdvanceDialogOpen(false)
+    setAdvanceForm(emptyAdvanceForm)
+    setAdvancePreview(null)
+  }
+
+  function updateAdvanceForm<K extends keyof typeof emptyAdvanceForm>(key: K, value: (typeof emptyAdvanceForm)[K]) {
+    setAdvancePreview(null)
+    setAdvanceForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  async function handlePreviewAdvance(e: React.SyntheticEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (!advanceForm.member_id) {
+      toast.error("Select a member.")
+      return
+    }
+
+    setPreviewLoading(true)
+    try {
+      const preview = await api.post<AdvancePreview>("/api/v1/contributions/advance-receipt/preview/", {
+        member_id: advanceForm.member_id,
+        months_ahead: Number(advanceForm.months_ahead),
+        received_date: advanceForm.received_date,
+        payment_method: advanceForm.payment_method,
+        notes: advanceForm.notes,
+      })
+      setAdvancePreview(preview)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const data = err.data as Record<string, string | string[]> | null
+        const first =
+          data &&
+          (typeof Object.values(data)[0] === "string"
+            ? (Object.values(data)[0] as string)
+            : (Object.values(data)[0] as string[])[0])
+        toast.error(first ?? `Failed to preview advance payment (${err.status})`)
+      } else {
+        toast.error("Could not reach the server.")
+      }
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  async function handleCreateAdvance() {
+    if (!advancePreview) {
+      toast.error("Preview the advance payment first.")
+      return
+    }
+
+    setSavingAdvance(true)
+    try {
+      const receipt = await api.post<Receipt>("/api/v1/contributions/advance-receipt/", {
+        member_id: advanceForm.member_id,
+        months_ahead: Number(advanceForm.months_ahead),
+        received_date: advanceForm.received_date,
+        payment_method: advanceForm.payment_method,
+        notes: advanceForm.notes,
+      })
+      const [refreshedObligations, refreshedReceipts] = await Promise.all([
+        api.get<Obligation[]>("/api/v1/obligations/"),
+        api.get<Receipt[]>("/api/v1/receipts/"),
+      ])
+      setObligations(refreshedObligations)
+      setReceipts(refreshedReceipts)
+      closeAdvanceDialog()
+      toast.success(`Advance payment recorded for ${receipt.items.length} month${receipt.items.length !== 1 ? "s" : ""}.`)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const data = err.data as Record<string, string | string[]> | null
+        const first =
+          data &&
+          (typeof Object.values(data)[0] === "string"
+            ? (Object.values(data)[0] as string)
+            : (Object.values(data)[0] as string[])[0])
+        toast.error(first ?? `Failed to create advance payment (${err.status})`)
+      } else {
+        toast.error("Could not reach the server.")
+      }
+    } finally {
+      setSavingAdvance(false)
+    }
   }
 
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
@@ -272,10 +401,15 @@ export default function AdminContributionsPage() {
             Track member obligations and payment receipts.
           </p>
         </div>
-        <Button size="sm" onClick={() => setDialogOpen(true)}>
-          <PlusIcon className="mr-1.5 h-4 w-4" />
-          New Receipt
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => setAdvanceDialogOpen(true)}>
+            Advance Payment
+          </Button>
+          <Button size="sm" onClick={() => setDialogOpen(true)}>
+            <PlusIcon className="mr-1.5 h-4 w-4" />
+            New Receipt
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -585,6 +719,126 @@ export default function AdminContributionsPage() {
           <DialogFooter showCloseButton>
             <Button type="submit" form="receipt-form" disabled={saving}>
               {saving ? "Saving…" : "Create Receipt"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={advanceDialogOpen} onOpenChange={(v) => { if (!v) closeAdvanceDialog() }}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Advance Payment</DialogTitle>
+          </DialogHeader>
+
+          <form id="advance-payment-form" onSubmit={handlePreviewAdvance}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="advance-member">Member</FieldLabel>
+                <Select
+                  value={advanceForm.member_id}
+                  onValueChange={(v) => updateAdvanceForm("member_id", v)}
+                >
+                  <SelectTrigger id="advance-member">
+                    <SelectValue placeholder="Select member" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {members.map((member) => (
+                      <SelectItem key={member.id} value={member.id}>
+                        {member.first_name} {member.last_name} ({member.member_number})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field>
+                  <FieldLabel htmlFor="advance-months">Months ahead</FieldLabel>
+                  <Input
+                    id="advance-months"
+                    type="number"
+                    min={1}
+                    value={advanceForm.months_ahead}
+                    onChange={(e) => updateAdvanceForm("months_ahead", e.target.value)}
+                    required
+                  />
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="advance-date">Date received</FieldLabel>
+                  <Input
+                    id="advance-date"
+                    type="date"
+                    value={advanceForm.received_date}
+                    onChange={(e) => updateAdvanceForm("received_date", e.target.value)}
+                    required
+                  />
+                </Field>
+              </div>
+
+              <Field>
+                <FieldLabel htmlFor="advance-method">Payment method</FieldLabel>
+                <Select
+                  value={advanceForm.payment_method}
+                  onValueChange={(v) => updateAdvanceForm("payment_method", v)}
+                >
+                  <SelectTrigger id="advance-method">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bank">Bank</SelectItem>
+                    <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="advance-notes">Notes (optional)</FieldLabel>
+                <Input
+                  id="advance-notes"
+                  value={advanceForm.notes}
+                  onChange={(e) => updateAdvanceForm("notes", e.target.value)}
+                />
+              </Field>
+
+              {advancePreview && (
+                <div className="rounded-md border">
+                  <div className="border-b px-3 py-2 text-sm font-medium">
+                    {advancePreview.member_name}
+                  </div>
+                  <div className="divide-y">
+                    {advancePreview.months.map((month) => (
+                      <div key={month.obligation_id} className="grid grid-cols-2 gap-2 px-3 py-2 text-sm">
+                        <div>
+                          <p className="font-medium">{month.label}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Capital {fmt(month.capital_amount_expected)} / Social {fmt(month.social_amount_expected)} / Social+ {fmt(month.social_plus_amount_expected)}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-medium">{fmt(month.amount_outstanding)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Outstanding
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="border-t px-3 py-2 text-right text-sm font-semibold">
+                    Total: {fmt(advancePreview.amount_received)}
+                  </div>
+                </div>
+              )}
+            </FieldGroup>
+          </form>
+
+          <DialogFooter showCloseButton>
+            <Button type="submit" form="advance-payment-form" variant="outline" disabled={previewLoading}>
+              {previewLoading ? "Previewing…" : "Preview"}
+            </Button>
+            <Button type="button" onClick={handleCreateAdvance} disabled={savingAdvance || !advancePreview}>
+              {savingAdvance ? "Saving…" : "Create Advance Receipt"}
             </Button>
           </DialogFooter>
         </DialogContent>
