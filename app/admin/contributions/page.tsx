@@ -77,6 +77,12 @@ interface Receipt {
   items: ReceiptItem[]
 }
 
+interface CursorPage<T> {
+  next: string | null
+  previous: string | null
+  results: T[]
+}
+
 interface MemberOption {
   id: string
   member_number: string
@@ -121,6 +127,15 @@ function obligationLabel(o: Obligation) {
     return `${shares} share${shares !== 1 ? "s" : ""} purchase`
   }
   return o.cycle
+}
+
+function cursorPath(url: string) {
+  try {
+    const parsed = new URL(url)
+    return `${parsed.pathname}${parsed.search}`
+  } catch {
+    return url
+  }
 }
 
 const today = new Date().toISOString().slice(0, 10)
@@ -194,6 +209,9 @@ function CardSkeleton({ count = 3 }: { count?: number }) {
 export default function AdminContributionsPage() {
   const [obligations, setObligations] = useState<Obligation[]>([])
   const [receipts, setReceipts] = useState<Receipt[]>([])
+  const [receiptNext, setReceiptNext] = useState<string | null>(null)
+  const [receiptPrevious, setReceiptPrevious] = useState<string | null>(null)
+  const [receiptsLoading, setReceiptsLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -207,15 +225,37 @@ export default function AdminContributionsPage() {
   const [savingAdvance, setSavingAdvance] = useState(false)
   const [members, setMembers] = useState<MemberOption[]>([])
 
+  function applyReceiptPage(page: CursorPage<Receipt>) {
+    setReceipts(page.results)
+    setReceiptNext(page.next)
+    setReceiptPrevious(page.previous)
+  }
+
+  async function loadReceipts(path = "/api/v1/receipts/") {
+    setReceiptsLoading(true)
+    try {
+      const page = await api.get<CursorPage<Receipt>>(path)
+      applyReceiptPage(page)
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? `Failed to load receipts (${err.status})`
+          : "Could not reach the server."
+      )
+    } finally {
+      setReceiptsLoading(false)
+    }
+  }
+
   useEffect(() => {
     Promise.all([
       api.get<Obligation[]>("/api/v1/obligations/"),
-      api.get<Receipt[]>("/api/v1/receipts/"),
+      api.get<CursorPage<Receipt>>("/api/v1/receipts/"),
       api.get<MemberOption[]>("/api/v1/members/"),
     ])
-      .then(([obs, recs, memberList]) => {
+      .then(([obs, receiptPage, memberList]) => {
         setObligations(obs)
-        setReceipts(recs)
+        applyReceiptPage(receiptPage)
         setMembers(memberList)
       })
       .catch((err) => {
@@ -323,10 +363,10 @@ export default function AdminContributionsPage() {
       })
       const [refreshedObligations, refreshedReceipts] = await Promise.all([
         api.get<Obligation[]>("/api/v1/obligations/"),
-        api.get<Receipt[]>("/api/v1/receipts/"),
+        api.get<CursorPage<Receipt>>("/api/v1/receipts/"),
       ])
       setObligations(refreshedObligations)
-      setReceipts(refreshedReceipts)
+      applyReceiptPage(refreshedReceipts)
       closeAdvanceDialog()
       toast.success(`Advance payment recorded for ${receipt.items.length} month${receipt.items.length !== 1 ? "s" : ""}.`)
     } catch (err) {
@@ -359,7 +399,7 @@ export default function AdminContributionsPage() {
 
     setSaving(true)
     try {
-      const receipt = await api.post<Receipt>("/api/v1/receipts/", {
+      await api.post<Receipt>("/api/v1/receipts/", {
         amount_received: String(total),
         received_date: form.received_date,
         payment_method: form.payment_method,
@@ -367,9 +407,12 @@ export default function AdminContributionsPage() {
         items,
       })
 
-      const refreshedObligations = await api.get<Obligation[]>("/api/v1/obligations/")
-      setReceipts((prev) => [receipt, ...prev])
+      const [refreshedObligations, refreshedReceipts] = await Promise.all([
+        api.get<Obligation[]>("/api/v1/obligations/"),
+        api.get<CursorPage<Receipt>>("/api/v1/receipts/"),
+      ])
       setObligations(refreshedObligations)
+      applyReceiptPage(refreshedReceipts)
       closeDialog()
       toast.success("Receipt created successfully.")
     } catch (err) {
@@ -514,11 +557,37 @@ export default function AdminContributionsPage() {
 
       {/* ── Receipts ── */}
       <div className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Receipts
-        </h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Receipts
+          </h2>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!receiptPrevious || loading || receiptsLoading}
+              onClick={() => {
+                if (receiptPrevious) void loadReceipts(cursorPath(receiptPrevious))
+              }}
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!receiptNext || loading || receiptsLoading}
+              onClick={() => {
+                if (receiptNext) void loadReceipts(cursorPath(receiptNext))
+              }}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
 
-        {loading ? (
+        {loading || receiptsLoading ? (
           <>
             <div className="hidden md:block"><TableSkeleton rows={3} cols={5} /></div>
             <div className="md:hidden"><CardSkeleton count={2} /></div>

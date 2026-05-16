@@ -10,6 +10,7 @@ import {
   TriangleAlertIcon,
   HandCoinsIcon,
   TrendingUpIcon,
+  HeartHandshakeIcon,
   FileBarChart2Icon,
   ReceiptIcon,
   HomeIcon,
@@ -51,6 +52,7 @@ const adminNav = [
   { title: "Penalties", url: "/admin/penalties", icon: TriangleAlertIcon },
   { title: "Loans", url: "/admin/loans", icon: HandCoinsIcon },
   { title: "Investments", url: "/admin/investments", icon: TrendingUpIcon },
+  { title: "Social Activities", url: "/admin/social-activities", icon: HeartHandshakeIcon },
   { title: "Reports & Audit", url: "/admin/reports", icon: FileBarChart2Icon },
   { title: "Other Charges", url: "/admin/other-charges", icon: ReceiptIcon },
 ]

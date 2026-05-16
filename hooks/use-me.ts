@@ -6,6 +6,9 @@ import { api } from "@/lib/api"
 interface MeProfile {
   full_name: string
   role: string
+  member_id: string | null
+  member_number: string | null
+  has_member_profile: boolean
 }
 
 export function useMe() {

@@ -80,12 +80,33 @@ function fmt(n: string | number) {
   return Number(n).toLocaleString("fr-RW", { minimumFractionDigits: 0 })
 }
 
+function formatDateInput(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function addOneMonth(dateString: string) {
+  const [year, month, day] = dateString.split("-").map(Number)
+  if (!year || !month || !day) return ""
+
+  const targetYear = month === 12 ? year + 1 : year
+  const targetMonthIndex = month === 12 ? 0 : month
+  const lastDayOfTargetMonth = new Date(targetYear, targetMonthIndex + 1, 0).getDate()
+  const dueDate = new Date(targetYear, targetMonthIndex, Math.min(day, lastDayOfTargetMonth))
+
+  return formatDateInput(dueDate)
+}
+
+const defaultIssuedDate = formatDateInput(new Date())
+
 const emptyLoanForm = {
   member_id: "",
   loan_product_id: "",
   principal_amount: "",
-  issued_date: new Date().toISOString().slice(0, 10),
-  first_due_date: "",
+  issued_date: defaultIssuedDate,
+  first_due_date: addOneMonth(defaultIssuedDate),
   notes: "",
 }
 
@@ -124,6 +145,9 @@ export default function AdminLoansPage() {
   const [archiveTarget, setArchiveTarget] = useState<LoanProduct | null>(null)
   const [archiving, setArchiving]         = useState(false)
 
+  // Loans filter
+  const [memberFilter, setMemberFilter] = useState("")
+
   useEffect(() => {
     // Fetch loans, loan products, and members in parallel
     Promise.all([
@@ -151,6 +175,7 @@ export default function AdminLoansPage() {
 
   async function handleCreateLoan(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
+    const firstDueDate = addOneMonth(loanForm.issued_date)
     setSavingLoan(true)
     try {
       const loan = await api.post<Loan>("/api/v1/loans/", {
@@ -158,7 +183,7 @@ export default function AdminLoansPage() {
         loan_product_id: loanForm.loan_product_id,
         principal_amount: loanForm.principal_amount,
         issued_date: loanForm.issued_date,
-        first_due_date: loanForm.first_due_date,
+        first_due_date: firstDueDate,
         notes: loanForm.notes,
       })
       setLoans((prev) => [loan, ...prev])
@@ -239,7 +264,8 @@ export default function AdminLoansPage() {
     }
   }
 
-  const activeProducts = products.filter((p) => p.is_active)
+  const activeProducts  = products.filter((p) => p.is_active)
+  const filteredLoans   = memberFilter ? loans.filter((l) => l.member === memberFilter) : loans
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -260,12 +286,26 @@ export default function AdminLoansPage() {
 
         {/* ── Loans tab ── */}
         <TabsContent value="loans" className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-muted-foreground">All loans issued to members.</p>
-            <Button size="sm" onClick={() => setNewLoanOpen(true)}>
-              <PlusIcon className="mr-1.5 h-4 w-4" />
-              New Loan
-            </Button>
+            <div className="flex items-center gap-2">
+              <select
+                value={memberFilter}
+                onChange={(e) => setMemberFilter(e.target.value)}
+                className="rounded-md border bg-background px-3 py-1.5 text-sm"
+              >
+                <option value="">All members</option>
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.first_name} {m.last_name} ({m.member_number})
+                  </option>
+                ))}
+              </select>
+              <Button size="sm" onClick={() => setNewLoanOpen(true)}>
+                <PlusIcon className="mr-1.5 h-4 w-4" />
+                New Loan
+              </Button>
+            </div>
           </div>
 
           {loansLoading && (
@@ -282,13 +322,13 @@ export default function AdminLoansPage() {
             </div>
           )}
 
-          {!loansLoading && !loansError && loans.length === 0 && (
+          {!loansLoading && !loansError && filteredLoans.length === 0 && (
             <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed py-16 text-sm text-muted-foreground">
-              No loans yet.
+              {memberFilter ? "No loans for this member." : "No loans yet."}
             </div>
           )}
 
-          {!loansLoading && !loansError && loans.length > 0 && (
+          {!loansLoading && !loansError && filteredLoans.length > 0 && (
             <>
               {/* Desktop */}
               <div className="hidden rounded-lg border md:block">
@@ -306,7 +346,7 @@ export default function AdminLoansPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {loans.map((l) => (
+                    {filteredLoans.map((l) => (
                       <TableRow key={l.id}>
                         <TableCell>
                           <p className="font-medium">{l.member_name}</p>
@@ -331,7 +371,7 @@ export default function AdminLoansPage() {
 
               {/* Mobile */}
               <div className="flex flex-col gap-3 md:hidden">
-                {loans.map((l) => (
+                {filteredLoans.map((l) => (
                   <div key={l.id} className="rounded-lg border p-4 text-sm">
                     <div className="mb-2 flex items-start justify-between gap-2">
                       <div>
@@ -521,7 +561,14 @@ export default function AdminLoansPage() {
                     id="loan-issued"
                     type="date"
                     value={loanForm.issued_date}
-                    onChange={(e) => setLoanForm((p) => ({ ...p, issued_date: e.target.value }))}
+                    onChange={(e) => {
+                      const issuedDate = e.target.value
+                      setLoanForm((p) => ({
+                        ...p,
+                        issued_date: issuedDate,
+                        first_due_date: addOneMonth(issuedDate),
+                      }))
+                    }}
                     required
                   />
                 </Field>
@@ -531,7 +578,7 @@ export default function AdminLoansPage() {
                     id="loan-first-due"
                     type="date"
                     value={loanForm.first_due_date}
-                    onChange={(e) => setLoanForm((p) => ({ ...p, first_due_date: e.target.value }))}
+                    readOnly
                     required
                   />
                 </Field>
