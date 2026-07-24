@@ -903,12 +903,15 @@ export default function AdminContributionsPage() {
           </form>
 
           <DialogFooter showCloseButton>
-            <Button type="submit" form="advance-payment-form" variant="outline" disabled={previewLoading}>
-              {previewLoading ? "Previewing…" : "Preview"}
-            </Button>
-            <Button type="button" onClick={handleCreateAdvance} disabled={savingAdvance || !advancePreview}>
-              {savingAdvance ? "Saving…" : "Create Advance Receipt"}
-            </Button>
+            {advancePreview ? (
+              <Button type="button" onClick={handleCreateAdvance} disabled={savingAdvance}>
+                {savingAdvance ? "Saving…" : "Create Advance Payment"}
+              </Button>
+            ) : (
+              <Button type="submit" form="advance-payment-form" disabled={previewLoading}>
+                {previewLoading ? "Previewing…" : "Preview"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { MoreHorizontalIcon, PlusIcon } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { api, ApiError } from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
@@ -72,6 +73,7 @@ const emptyShareForm = {
 }
 
 export default function MembersPage() {
+  const router = useRouter()
   const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -261,7 +263,11 @@ export default function MembersPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="w-10">
-                      <MemberActionsMenu member={m} onAdjustShares={openShareDialog} />
+                      <MemberActionsMenu
+                        member={m}
+                        onAdjustShares={openShareDialog}
+                        onViewContributions={(member) => router.push(`/admin/members/${member.id}/contributions`)}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -286,7 +292,11 @@ export default function MembersPage() {
                     <Badge variant={m.status === "active" ? "default" : "secondary"}>
                       {m.status}
                     </Badge>
-                    <MemberActionsMenu member={m} onAdjustShares={openShareDialog} />
+                    <MemberActionsMenu
+                      member={m}
+                      onAdjustShares={openShareDialog}
+                      onViewContributions={(member) => router.push(`/admin/members/${member.id}/contributions`)}
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
@@ -496,9 +506,11 @@ export default function MembersPage() {
 function MemberActionsMenu({
   member,
   onAdjustShares,
+  onViewContributions,
 }: {
   member: Member
   onAdjustShares: (m: Member) => void
+  onViewContributions: (m: Member) => void
 }) {
   return (
     <DropdownMenu>
@@ -511,6 +523,9 @@ function MemberActionsMenu({
       <DropdownMenuContent align="end">
         <DropdownMenuItem onSelect={() => onAdjustShares(member)}>
           Adjust Shares
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onViewContributions(member)}>
+          View Contributions
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
