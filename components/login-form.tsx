@@ -47,9 +47,9 @@ export function LoginForm({
     } catch (err) {
       if (err instanceof ApiError) {
         const data = err.data as Record<string, string> | null
-        toast.error(data?.detail ?? "Invalid email or password.")
+        toast.error(data?.detail ?? "Invalid email or password!")
       } else {
-        toast.error("Could not reach the server. Please try again.")
+        toast.error("Could not reach the server. Please try again!")
       }
     } finally {
       setLoading(false)
