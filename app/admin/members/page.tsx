@@ -21,7 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import {
   Table,
   TableBody,
@@ -59,6 +59,7 @@ const emptyMemberForm = {
   last_name: "",
   phone: "",
   email: "",
+  nid: "",
   join_date: new Date().toISOString().slice(0, 10),
   default_password: "",
 }
@@ -81,6 +82,7 @@ export default function MembersPage() {
   // New member dialog
   const [newMemberOpen, setNewMemberOpen] = useState(false)
   const [memberForm, setMemberForm] = useState(emptyMemberForm)
+  const [nidError, setNidError] = useState<string | null>(null)
   const [savingMember, setSavingMember] = useState(false)
 
   // Adjust shares dialog
@@ -105,14 +107,24 @@ export default function MembersPage() {
   // ── New member ──────────────────────────────────────────────────────────────
 
   function handleMemberFieldChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setMemberForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
+    const { name, value } = e.target
+    setMemberForm((prev) => ({ ...prev, [name]: value }))
+    if (name === "nid") setNidError(null)
   }
 
   async function handleCreateMember(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
+    const { nid, ...memberFields } = memberForm
+    if (nid && !/^[0-9]{16}$/.test(nid)) {
+      setNidError("Enter exactly 16 digits.")
+      return
+    }
+
+    setNidError(null)
     setSavingMember(true)
     try {
-      const member = await api.post<Member>("/api/v1/members/", memberForm)
+      const payload = nid ? { ...memberFields, nid } : memberFields
+      const member = await api.post<Member>("/api/v1/members/", payload)
       setMembers((prev) => [member, ...prev])
       setNewMemberOpen(false)
       setMemberForm(emptyMemberForm)
@@ -120,6 +132,10 @@ export default function MembersPage() {
     } catch (err) {
       if (err instanceof ApiError) {
         const data = err.data as Record<string, string[]> | null
+        if (data?.nid?.[0]) {
+          setNidError(data.nid[0])
+          return
+        }
         const first = data && Object.values(data)[0]?.[0]
         toast.error(first ?? `Failed to create member (${err.status})`)
       } else {
@@ -204,7 +220,14 @@ export default function MembersPage() {
           </p>
         </div>
 
-        <Button size="sm" onClick={() => setNewMemberOpen(true)}>
+        <Button
+          size="sm"
+          disabled={savingMember}
+          onClick={() => {
+            setNidError(null)
+            setNewMemberOpen(true)
+          }}
+        >
           <PlusIcon className="mr-1.5 h-4 w-4" />
           New Member
         </Button>
@@ -316,10 +339,13 @@ export default function MembersPage() {
         open={newMemberOpen}
         onOpenChange={(v) => {
           setNewMemberOpen(v)
-          if (!v) setMemberForm(emptyMemberForm)
+          if (!v) {
+            setMemberForm(emptyMemberForm)
+            setNidError(null)
+          }
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Member</DialogTitle>
           </DialogHeader>
@@ -368,6 +394,23 @@ export default function MembersPage() {
                   onChange={handleMemberFieldChange}
                   required
                 />
+              </Field>
+              <Field data-invalid={!!nidError}>
+                <FieldLabel htmlFor="new-member-nid">National ID (NID)</FieldLabel>
+                <Input
+                  id="new-member-nid"
+                  name="nid"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  disabled={savingMember}
+                  value={memberForm.nid}
+                  onChange={handleMemberFieldChange}
+                  aria-invalid={!!nidError}
+                  aria-describedby={nidError ? "new-member-nid-hint new-member-nid-error" : "new-member-nid-hint"}
+                />
+                <FieldDescription id="new-member-nid-hint">Optional. Enter 16 digits.</FieldDescription>
+                <FieldError id="new-member-nid-error">{nidError}</FieldError>
               </Field>
               <Field>
                 <FieldLabel htmlFor="join_date">Join date</FieldLabel>
